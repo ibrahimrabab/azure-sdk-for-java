@@ -12,7 +12,8 @@ public class App {
             DownloadStream.class,
             DownloadContent.class,
             OpenInputStream.class,
-            OpenSeekableByteChannelRead.class
+            OpenSeekableByteChannelRead.class,
+            BlobClientUpload.class
         }, args);
     }
 }

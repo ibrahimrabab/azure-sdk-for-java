@@ -16,6 +16,7 @@ import reactor.core.publisher.Mono;
 
 import java.nio.ByteBuffer;
 import java.util.Base64;
+import java.util.Random;
 
 import static com.azure.core.util.FluxUtil.monoError;
 
@@ -30,6 +31,9 @@ public class OriginalContent {
     private static final BinaryData BLOB_CONTENT_HEAD = BinaryData.fromString(BLOB_CONTENT_HEAD_STRING);
     private long dataChecksum = -1;
     private long blobSize = 0;
+    // used for upload scenarios
+    public BinaryData uploadData;
+
 
     public OriginalContent() {
     }
@@ -48,6 +52,34 @@ public class OriginalContent {
                 CrcInputStream::close)
             .map(info -> dataChecksum = info.getCrc())
             .then();
+    }
+
+    public Mono<Void> setupBlobForUpload(long blobSize) {
+        if (dataChecksum != -1) {
+            throw LOGGER.logExceptionAsError(new IllegalStateException("setupBlob can't be called again"));
+        }
+
+        this.blobSize = blobSize;
+
+        if (uploadData == null) {
+            uploadData = BinaryData.fromBytes(new byte[(int) blobSize]);
+            new Random().nextBytes(uploadData.toBytes());
+        }
+
+        return Mono.using(
+                () -> new CrcInputStream(uploadData, blobSize),
+                CrcInputStream::getContentInfo,
+                CrcInputStream::close)
+            .map(info -> dataChecksum = info.getCrc())
+            .then();
+    }
+
+    public Mono<Boolean> checkMatch(BlobAsyncClient blobAsyncClient, Context span) {
+        if (dataChecksum == -1) {
+            return monoError(LOGGER, new IllegalStateException("setupBlob must complete first"));
+        }
+
+        return checkMatch(blobAsyncClient.downloadStream(), span);
     }
 
     public Mono<Boolean> checkMatch(BinaryData data, Context span) {
