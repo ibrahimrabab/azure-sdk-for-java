@@ -120,4 +120,8 @@ public class OriginalContent {
             throw LOGGER.logExceptionAsError(new RuntimeException(e));
         }
     }
+
+    public CrcInputStream getBlobContent() {
+        return new CrcInputStream(BLOB_CONTENT_HEAD, blobSize);
+    }
 }
