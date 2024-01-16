@@ -37,7 +37,7 @@ public class AppendBlockFromUrl extends BlobScenarioBase<StorageStressOptions> {
     @Override
     public Mono<Void> globalSetupAsync() {
         return super.globalSetupAsync()
-            .then(ORIGINAL_CONTENT.setupBlobForUpload(options.getSize()));
+            .then(ORIGINAL_CONTENT.setupBlobWithoutUpload(options.getSize()));
     }
 
     @Override

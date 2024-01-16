@@ -14,9 +14,9 @@ import com.azure.storage.stress.CrcInputStream;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Base64;
-import java.util.Random;
 
 import static com.azure.core.util.FluxUtil.monoError;
 
@@ -54,23 +54,29 @@ public class OriginalContent {
             .then();
     }
 
-    public Mono<Void> setupBlobForUpload(long blobSize) {
+    public Mono<Void> setupBlobWithoutUpload(long blobSize) {
         if (dataChecksum != -1) {
-            throw LOGGER.logExceptionAsError(new IllegalStateException("setupBlob can't be called again"));
+            return Mono.error(LOGGER.logExceptionAsError(new IllegalStateException("setupBlob can't be called again")));
         }
 
         this.blobSize = blobSize;
-
-        if (uploadData == null) {
-            uploadData = BinaryData.fromBytes(new byte[(int) blobSize]);
-            new Random().nextBytes(uploadData.toBytes());
-        }
-
         return Mono.using(
-                () -> new CrcInputStream(uploadData, blobSize),
-                CrcInputStream::getContentInfo,
-                CrcInputStream::close)
-            .map(info -> dataChecksum = info.getCrc())
+                () -> new CrcInputStream(BLOB_CONTENT_HEAD, blobSize),
+                data -> {
+                    // Read the entire stream to ensure sink.emitValue() is called
+                    byte[] buffer = new byte[4096];
+                    try {
+                        while (data.read(buffer) != -1) {
+                            // No action needed, just reading to consume the stream
+                        }
+                    } catch (IOException e) {
+                        return Mono.error(e);
+                    }
+                    return data.getContentInfo();
+                },
+                CrcInputStream::close
+            )
+            .doOnNext(info -> dataChecksum = info.getCrc())
             .then();
     }
 

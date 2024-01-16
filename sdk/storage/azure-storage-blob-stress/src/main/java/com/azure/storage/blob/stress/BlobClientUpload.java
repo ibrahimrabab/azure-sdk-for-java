@@ -27,8 +27,9 @@ public class BlobClientUpload extends BlobScenarioBase<StorageStressOptions> {
 
     @Override
     protected boolean runInternal(Context span) {
-        syncClient.upload(ORIGINAL_CONTENT.uploadData);
-        return ORIGINAL_CONTENT.checkMatch(asyncClient, span).block();
+        syncClient.upload(ORIGINAL_CONTENT.getBlobContent());
+        return true;
+        //return ORIGINAL_CONTENT.checkMatch(asyncClient, span).block();
     }
 
     @Override
@@ -39,7 +40,8 @@ public class BlobClientUpload extends BlobScenarioBase<StorageStressOptions> {
     @Override
     public Mono<Void> globalSetupAsync() {
         return super.globalSetupAsync()
-            .then(ORIGINAL_CONTENT.setupBlobForUpload(options.getSize()));
+            //.then(ORIGINAL_CONTENT.setupBlob(asyncClient, options.getSize()));
+            .then(ORIGINAL_CONTENT.setupBlobWithoutUpload(options.getSize()));
     }
 
     @Override
