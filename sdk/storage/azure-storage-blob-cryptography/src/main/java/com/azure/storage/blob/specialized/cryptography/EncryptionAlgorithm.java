@@ -3,7 +3,7 @@
 
 package com.azure.storage.blob.specialized.cryptography;
 
-enum EncryptionAlgorithm {
+public enum EncryptionAlgorithm {
     /**
      * AES-CBC using a 256-bit key.
      */

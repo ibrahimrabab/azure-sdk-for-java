@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.storage.blob.specialized.cryptography;
+package com.azure.storage.blob.specialized.cryptography.implementation;
 
 import com.azure.json.JsonReader;
 import com.azure.json.JsonSerializable;
@@ -13,7 +13,7 @@ import java.io.IOException;
 /**
  * Represents the envelope key details stored on the service.
  */
-final class WrappedKey implements JsonSerializable<WrappedKey> {
+public final class WrappedKey implements JsonSerializable<WrappedKey> {
 
     /**
      * The key identifier string.

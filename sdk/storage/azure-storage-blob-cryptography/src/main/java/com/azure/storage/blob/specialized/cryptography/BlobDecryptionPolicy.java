@@ -15,6 +15,9 @@ import com.azure.core.http.policy.HttpPipelinePolicy;
 import com.azure.core.util.FluxUtil;
 import com.azure.core.util.logging.ClientLogger;
 import com.azure.storage.blob.models.BlobRange;
+import com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptedBlobRange;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionData;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -23,10 +26,10 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_BLOCK_SIZE;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_METADATA_HEADER;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_PROTOCOL_V1;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.RANGE_HEADER;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_BLOCK_SIZE;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_METADATA_HEADER;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_PROTOCOL_V1;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.RANGE_HEADER;
 
 /**
  * This is a decryption policy in an {@link com.azure.core.http.HttpPipeline} to decrypt data in an {@link

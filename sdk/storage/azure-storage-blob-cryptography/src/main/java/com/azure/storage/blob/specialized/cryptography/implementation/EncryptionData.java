@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.storage.blob.specialized.cryptography;
+package com.azure.storage.blob.specialized.cryptography.implementation;
 
 import com.azure.core.util.logging.ClientLogger;
 import com.azure.json.JsonProviders;
@@ -9,21 +9,23 @@ import com.azure.json.JsonReader;
 import com.azure.json.JsonSerializable;
 import com.azure.json.JsonToken;
 import com.azure.json.JsonWriter;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionAgent;
+import com.azure.storage.blob.specialized.cryptography.implementation.WrappedKey;
 
 import java.io.IOException;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_PROTOCOL_V1;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_PROTOCOL_V2;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_PROTOCOL_V1;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_PROTOCOL_V2;
 import static com.azure.storage.blob.specialized.cryptography.EncryptionAlgorithm.AES_CBC_256;
 import static com.azure.storage.blob.specialized.cryptography.EncryptionAlgorithm.AES_GCM_256;
 
 /**
  * Represents the encryption data that is stored on the service.
  */
-final class EncryptionData implements JsonSerializable<EncryptionData> {
+public final class EncryptionData implements JsonSerializable<EncryptionData> {
     private static final ClientLogger LOGGER = new ClientLogger(EncryptionData.class);
 
     /**
@@ -59,7 +61,7 @@ final class EncryptionData implements JsonSerializable<EncryptionData> {
     /**
      * Initializes a new instance of the {@link EncryptionData} class.
      */
-    EncryptionData() {
+    public EncryptionData() {
     }
 
     /**
@@ -126,7 +128,7 @@ final class EncryptionData implements JsonSerializable<EncryptionData> {
      *
      * @return The authenticationBlockInfo property.
      */
-    EncryptedRegionInfo getEncryptedRegionInfo() {
+    public EncryptedRegionInfo getEncryptedRegionInfo() {
         return encryptedRegionInfo;
     }
 
@@ -146,7 +148,7 @@ final class EncryptionData implements JsonSerializable<EncryptionData> {
      *
      * @return this
      */
-    EncryptionData setEncryptionMode(String encryptionMode) {
+    public EncryptionData setEncryptionMode(String encryptionMode) {
         this.encryptionMode = encryptionMode;
         return this;
     }
@@ -159,7 +161,7 @@ final class EncryptionData implements JsonSerializable<EncryptionData> {
      *
      * @return this
      */
-    EncryptionData setWrappedContentKey(WrappedKey wrappedContentKey) {
+    public EncryptionData setWrappedContentKey(WrappedKey wrappedContentKey) {
         this.wrappedContentKey = wrappedContentKey;
         return this;
     }
@@ -171,7 +173,7 @@ final class EncryptionData implements JsonSerializable<EncryptionData> {
      *
      * @return this
      */
-    EncryptionData setEncryptionAgent(EncryptionAgent encryptionAgent) {
+    public EncryptionData setEncryptionAgent(EncryptionAgent encryptionAgent) {
         this.encryptionAgent = encryptionAgent;
         return this;
     }
@@ -183,7 +185,7 @@ final class EncryptionData implements JsonSerializable<EncryptionData> {
      *
      * @return this
      */
-    EncryptionData setContentEncryptionIV(byte[] contentEncryptionIV) {
+    public EncryptionData setContentEncryptionIV(byte[] contentEncryptionIV) {
         this.contentEncryptionIV = contentEncryptionIV;
         return this;
     }
@@ -195,7 +197,7 @@ final class EncryptionData implements JsonSerializable<EncryptionData> {
      *
      * @return this
      */
-    EncryptionData setKeyWrappingMetadata(Map<String, String> keyWrappingMetadata) {
+    public EncryptionData setKeyWrappingMetadata(Map<String, String> keyWrappingMetadata) {
         this.keyWrappingMetadata = keyWrappingMetadata;
         return this;
     }
@@ -206,7 +208,7 @@ final class EncryptionData implements JsonSerializable<EncryptionData> {
      * @param encryptedRegionInfo The authenticationBlockInfo value to set.
      * @return The updated object
      */
-    EncryptionData setEncryptedRegionInfo(EncryptedRegionInfo encryptedRegionInfo) {
+    public EncryptionData setEncryptedRegionInfo(EncryptedRegionInfo encryptedRegionInfo) {
         this.encryptedRegionInfo = encryptedRegionInfo;
         return this;
     }

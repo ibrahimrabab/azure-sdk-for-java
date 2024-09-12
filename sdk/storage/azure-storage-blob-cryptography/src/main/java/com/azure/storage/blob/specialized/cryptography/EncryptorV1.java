@@ -4,6 +4,9 @@
 package com.azure.storage.blob.specialized.cryptography;
 
 import com.azure.core.util.logging.ClientLogger;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionAgent;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionData;
+import com.azure.storage.blob.specialized.cryptography.implementation.WrappedKey;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -16,8 +19,8 @@ import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.Map;
 
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.AES_CBC_PKCS5PADDING;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_PROTOCOL_V1;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.AES_CBC_PKCS5PADDING;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_PROTOCOL_V1;
 
 class EncryptorV1 extends Encryptor {
     private static final ClientLogger LOGGER = new ClientLogger(EncryptorV1.class);

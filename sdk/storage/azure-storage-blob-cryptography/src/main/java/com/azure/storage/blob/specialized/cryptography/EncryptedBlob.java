@@ -3,6 +3,7 @@
 
 package com.azure.storage.blob.specialized.cryptography;
 
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionData;
 import reactor.core.publisher.Flux;
 
 import java.nio.ByteBuffer;

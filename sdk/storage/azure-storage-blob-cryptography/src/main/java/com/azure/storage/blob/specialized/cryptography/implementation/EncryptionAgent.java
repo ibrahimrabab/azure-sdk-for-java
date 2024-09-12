@@ -1,12 +1,13 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.storage.blob.specialized.cryptography;
+package com.azure.storage.blob.specialized.cryptography.implementation;
 
 import com.azure.json.JsonReader;
 import com.azure.json.JsonSerializable;
 import com.azure.json.JsonToken;
 import com.azure.json.JsonWriter;
+import com.azure.storage.blob.specialized.cryptography.EncryptionAlgorithm;
 
 import java.io.IOException;
 
@@ -14,7 +15,7 @@ import java.io.IOException;
  * Represents the encryption agent stored on the service. It consists of the encryption protocol version and encryption
  * algorithm used.
  */
-final class EncryptionAgent implements JsonSerializable<EncryptionAgent> {
+public final class EncryptionAgent implements JsonSerializable<EncryptionAgent> {
 
     /**
      * The protocol version used for encryption.
@@ -29,7 +30,7 @@ final class EncryptionAgent implements JsonSerializable<EncryptionAgent> {
     /**
      * Initializes a new instance of the {@link EncryptionAgent} class.
      */
-    EncryptionAgent() {
+    public EncryptionAgent() {
     }
 
     /**
@@ -39,7 +40,7 @@ final class EncryptionAgent implements JsonSerializable<EncryptionAgent> {
      * @param protocol The encryption protocol version.
      * @param algorithm The encryption algorithm.
      */
-    EncryptionAgent(String protocol, EncryptionAlgorithm algorithm) {
+    public EncryptionAgent(String protocol, EncryptionAlgorithm algorithm) {
         this.protocol = protocol;
         this.algorithm = algorithm;
     }

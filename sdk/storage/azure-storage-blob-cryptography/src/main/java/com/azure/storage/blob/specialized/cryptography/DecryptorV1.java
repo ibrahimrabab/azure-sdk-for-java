@@ -6,6 +6,8 @@ package com.azure.storage.blob.specialized.cryptography;
 import com.azure.core.cryptography.AsyncKeyEncryptionKey;
 import com.azure.core.cryptography.AsyncKeyEncryptionKeyResolver;
 import com.azure.core.util.logging.ClientLogger;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptedBlobRange;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionData;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 
@@ -21,10 +23,10 @@ import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.AES;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.AES_CBC_NO_PADDING;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.AES_CBC_PKCS5PADDING;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_BLOCK_SIZE;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.AES;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.AES_CBC_NO_PADDING;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.AES_CBC_PKCS5PADDING;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_BLOCK_SIZE;
 
 class DecryptorV1 extends Decryptor {
     private static final ClientLogger LOGGER = new ClientLogger(DecryptorV1.class);

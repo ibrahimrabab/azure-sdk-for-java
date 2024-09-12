@@ -6,7 +6,7 @@ package com.azure.storage.blob.specialized.cryptography;
 import com.azure.storage.common.implementation.Constants;
 import com.azure.storage.common.implementation.StorageImplUtils;
 
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.GCM_ENCRYPTION_REGION_LENGTH;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.GCM_ENCRYPTION_REGION_LENGTH;
 
 /**
  * This class contains the configuration options used to encrypt the blob content on the client side.

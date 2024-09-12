@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.storage.blob.specialized.cryptography;
+package com.azure.storage.blob.specialized.cryptography.implementation;
 
 import com.azure.json.JsonReader;
 import com.azure.json.JsonSerializable;
@@ -10,7 +10,7 @@ import com.azure.json.JsonWriter;
 
 import java.io.IOException;
 
-final class EncryptedRegionInfo implements JsonSerializable<EncryptedRegionInfo> {
+public final class EncryptedRegionInfo implements JsonSerializable<EncryptedRegionInfo> {
     /**
      * The cipher text length.
      */
@@ -30,7 +30,7 @@ final class EncryptedRegionInfo implements JsonSerializable<EncryptedRegionInfo>
      * @param ciphertextLength The length of the cipher text.
      * @param nonceLength The length of the nonce.
      */
-    EncryptedRegionInfo(long ciphertextLength, int nonceLength) {
+    public EncryptedRegionInfo(long ciphertextLength, int nonceLength) {
         this.dataLength = ciphertextLength;
         this.nonceLength = nonceLength;
     }

@@ -4,6 +4,10 @@
 package com.azure.storage.blob.specialized.cryptography;
 
 import com.azure.core.util.logging.ClientLogger;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptedRegionInfo;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionAgent;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionData;
+import com.azure.storage.blob.specialized.cryptography.implementation.WrappedKey;
 import com.azure.storage.common.implementation.BufferStagingArea;
 import com.azure.storage.common.implementation.UploadUtils;
 import reactor.core.Exceptions;
@@ -21,12 +25,12 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.Map;
 
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.AES_GCM_NO_PADDING;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.AES_KEY_SIZE_BITS;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.EMPTY_BUFFER;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_PROTOCOL_V2;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.NONCE_LENGTH;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.TAG_LENGTH;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.AES_GCM_NO_PADDING;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.AES_KEY_SIZE_BITS;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.EMPTY_BUFFER;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_PROTOCOL_V2;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.NONCE_LENGTH;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.TAG_LENGTH;
 
 class EncryptorV2 extends Encryptor {
     private static final ClientLogger LOGGER = new ClientLogger(EncryptorV2.class);

@@ -36,6 +36,8 @@ import com.azure.storage.blob.options.BlobParallelUploadOptions;
 import com.azure.storage.blob.options.BlobQueryOptions;
 import com.azure.storage.blob.options.BlobUploadFromFileOptions;
 import com.azure.storage.blob.specialized.BlockBlobAsyncClient;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionData;
+import com.azure.storage.blob.specialized.cryptography.implementation.WrappedKey;
 import com.azure.storage.common.implementation.Constants;
 import com.azure.storage.common.implementation.StorageImplUtils;
 import com.azure.storage.common.implementation.UploadUtils;
@@ -63,11 +65,11 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import static com.azure.core.util.FluxUtil.monoError;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.AES;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.AES_KEY_SIZE_BITS;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.AGENT_METADATA_KEY;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.AGENT_METADATA_VALUE;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_DATA_KEY;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.AES;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.AES_KEY_SIZE_BITS;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.AGENT_METADATA_KEY;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.AGENT_METADATA_VALUE;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_DATA_KEY;
 
 /**
  * This class provides a client side encryption client that contains generic blob operations for Azure Storage Blobs.

@@ -5,6 +5,8 @@ package com.azure.storage.blob.specialized.cryptography;
 
 import com.azure.core.cryptography.AsyncKeyEncryptionKey;
 import com.azure.core.cryptography.AsyncKeyEncryptionKeyResolver;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptedBlobRange;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionData;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -26,7 +28,7 @@ class NoOpDecryptor extends Decryptor {
 
     @Override
     Flux<ByteBuffer> decrypt(Flux<ByteBuffer> encryptedFlux, EncryptedBlobRange encryptedBlobRange, boolean padding,
-        String requestUri, AtomicLong totalInputBytes, byte[] contentEncryptionKey) {
+                             String requestUri, AtomicLong totalInputBytes, byte[] contentEncryptionKey) {
         return encryptedFlux;
     }
 

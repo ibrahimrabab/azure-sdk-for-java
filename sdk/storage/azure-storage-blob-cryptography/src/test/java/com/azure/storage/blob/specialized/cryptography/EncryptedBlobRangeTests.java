@@ -4,6 +4,10 @@
 package com.azure.storage.blob.specialized.cryptography;
 
 import com.azure.storage.blob.models.BlobRange;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptedBlobRange;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptedRegionInfo;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionAgent;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionData;
 import com.azure.storage.common.implementation.Constants;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -13,11 +17,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.stream.Stream;
 
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_PROTOCOL_V1;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_PROTOCOL_V2;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.GCM_ENCRYPTION_REGION_LENGTH;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.NONCE_LENGTH;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.TAG_LENGTH;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_PROTOCOL_V1;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_PROTOCOL_V2;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.GCM_ENCRYPTION_REGION_LENGTH;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.NONCE_LENGTH;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.TAG_LENGTH;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class EncryptedBlobRangeTests extends BlobCryptographyTestBase {

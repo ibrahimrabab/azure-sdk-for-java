@@ -4,6 +4,8 @@
 package com.azure.storage.blob.specialized.cryptography;
 
 import com.azure.core.util.logging.ClientLogger;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionData;
+import com.azure.storage.blob.specialized.cryptography.implementation.WrappedKey;
 import reactor.core.publisher.Flux;
 
 import javax.crypto.SecretKey;
@@ -12,7 +14,7 @@ import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.Map;
 
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_MODE;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_MODE;
 
 abstract class Encryptor {
     private static final ClientLogger LOGGER = new ClientLogger(Encryptor.class);
@@ -28,7 +30,7 @@ abstract class Encryptor {
     protected abstract Flux<ByteBuffer> encrypt(Flux<ByteBuffer> plaintext) throws GeneralSecurityException;
 
     protected EncryptionData buildEncryptionData(Map<String, String> keyWrappingMetadata,
-        WrappedKey wrappedKey) {
+                                                 WrappedKey wrappedKey) {
         return new EncryptionData()
             .setEncryptionMode(ENCRYPTION_MODE)
             .setKeyWrappingMetadata(keyWrappingMetadata)

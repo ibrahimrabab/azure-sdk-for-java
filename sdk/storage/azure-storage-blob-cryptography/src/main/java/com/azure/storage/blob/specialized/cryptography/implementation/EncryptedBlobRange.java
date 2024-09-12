@@ -1,18 +1,19 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.storage.blob.specialized.cryptography;
+package com.azure.storage.blob.specialized.cryptography.implementation;
 
 import com.azure.core.util.CoreUtils;
 import com.azure.core.util.logging.ClientLogger;
 import com.azure.storage.blob.models.BlobRange;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionData;
 
 
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_BLOCK_SIZE;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_PROTOCOL_V1;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_PROTOCOL_V2;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.NONCE_LENGTH;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.TAG_LENGTH;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_BLOCK_SIZE;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_PROTOCOL_V1;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_PROTOCOL_V2;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.NONCE_LENGTH;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.TAG_LENGTH;
 
 /**
  * This is a representation of a range of bytes on an encrypted blob, which may be expanded from the requested range to
@@ -20,7 +21,7 @@ import static com.azure.storage.blob.specialized.cryptography.CryptographyConsta
  * will update the count in case the user did not specify one. Passing null as an EncryptedBlobRange value will default
  * to the entire range of the blob.
  */
-final class EncryptedBlobRange {
+public final class EncryptedBlobRange {
     private static final ClientLogger LOGGER = new ClientLogger(EncryptedBlobRange.class);
 
     /**
@@ -49,7 +50,7 @@ final class EncryptedBlobRange {
      */
     private final long amountPlaintextToSkip;
 
-    static EncryptedBlobRange getEncryptedBlobRangeFromHeader(String stringRange, EncryptionData encryptionData) {
+    public static EncryptedBlobRange getEncryptedBlobRangeFromHeader(String stringRange, EncryptionData encryptionData) {
         if (encryptionData == null) {
             return null;
         }
@@ -74,7 +75,7 @@ final class EncryptedBlobRange {
         return new EncryptedBlobRange(range, encryptionData);
     }
 
-    EncryptedBlobRange(BlobRange originalRange, EncryptionData encryptionData) {
+    public EncryptedBlobRange(BlobRange originalRange, EncryptionData encryptionData) {
         if (originalRange == null) {
             this.originalRange = new BlobRange(0);
             this.offsetAdjustment = 0;
@@ -182,7 +183,7 @@ final class EncryptedBlobRange {
     /**
      * @return How many bytes to include in the range. Must be greater than or equal to 0 if specified.
      */
-    Long getAdjustedDownloadCount() {
+    public Long getAdjustedDownloadCount() {
         return this.adjustedDownloadCount;
     }
 
@@ -199,7 +200,7 @@ final class EncryptedBlobRange {
      * @return A {@link BlobRange} object which includes the necessary adjustments to offset and count to effectively
      *        decrypt the blob.
      */
-    BlobRange toBlobRange() {
+    public BlobRange toBlobRange() {
         return new BlobRange(this.originalRange.getOffset() - this.offsetAdjustment, this.adjustedDownloadCount);
     }
 }

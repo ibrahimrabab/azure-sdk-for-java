@@ -6,6 +6,8 @@ package com.azure.storage.blob.specialized.cryptography;
 import com.azure.core.cryptography.AsyncKeyEncryptionKey;
 import com.azure.core.cryptography.AsyncKeyEncryptionKeyResolver;
 import com.azure.core.util.logging.ClientLogger;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptedBlobRange;
+import com.azure.storage.blob.specialized.cryptography.implementation.EncryptionData;
 import com.azure.storage.common.implementation.BufferStagingArea;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
@@ -26,12 +28,12 @@ import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.AES;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.AES_GCM_NO_PADDING;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.AES_KEY_SIZE_BITS;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.EMPTY_BUFFER;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.ENCRYPTION_PROTOCOL_V2;
-import static com.azure.storage.blob.specialized.cryptography.CryptographyConstants.TAG_LENGTH;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.AES;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.AES_GCM_NO_PADDING;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.AES_KEY_SIZE_BITS;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.EMPTY_BUFFER;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.ENCRYPTION_PROTOCOL_V2;
+import static com.azure.storage.blob.specialized.cryptography.implementation.CryptographyConstants.TAG_LENGTH;
 
 class DecryptorV2 extends Decryptor {
     private static final ClientLogger LOGGER = new ClientLogger(DecryptorV2.class);
