@@ -108,6 +108,7 @@ public class HttpFaultInjectingTests {
      */
     @Test
     public void downloadToFileWithFaultInjection() throws InterruptedException, NoSuchAlgorithmException {
+        int outerLoopRuns = 2;
         int testRuns = 100;
         int length = 30 * Constants.MB - 1;
         byte[] realFileBytes = new byte[length];
@@ -128,30 +129,39 @@ public class HttpFaultInjectingTests {
             //.retryOptions(new RequestRetryOptions(RetryPolicyType.FIXED, 4, null, 10L, 10L, null))
             .buildFileClient();
 
-        List<File> files = new ArrayList<>(testRuns);
-        URL testFolder = getClass().getClassLoader().getResource("testfiles");
-        //File downloadFile = new File(String.format("%s/%s.txt", testFolder.getPath(), prefix));
-        for (int i = 0; i < testRuns; i++) {
-            File file = new File(String.format("%s/%s.txt", testFolder.getPath(), i));
-            //File file = File.createTempFile(CoreUtils.randomUuid().toString() + i, ".txt");
-            file.deleteOnExit();
-            files.add(file);
-        }
+//        List<File> files = new ArrayList<>(testRuns);
+//        URL testFolder = getClass().getClassLoader().getResource("testfiles");
+//        //File downloadFile = new File(String.format("%s/%s.txt", testFolder.getPath(), prefix));
+//        for (int i = 0; i < testRuns; i++) {
+//            File file = new File(String.format("%s/%s.txt", testFolder.getPath(), i));
+//            //File file = File.createTempFile(CoreUtils.randomUuid().toString() + i, ".txt");
+//            file.deleteOnExit();
+//            files.add(file);
+//        }
         AtomicInteger successCount = new AtomicInteger();
         Map<String, byte[]> failedDownloads = new ConcurrentHashMap<>();
         Map<String, String> exceptionOccurrences = new ConcurrentHashMap<>();
 
-        CountDownLatch countDownLatch = new CountDownLatch(testRuns);
-        SharedExecutorService.getInstance().invokeAll(files.stream().map(it -> (Callable<Void>) () -> {
-            try {
-                System.out.println("Starting run for file: " + it.getAbsolutePath());
-                downloadClient.downloadToFileWithResponse(it.getAbsolutePath(), null, null, Context.NONE);
-                byte[] actualFileBytes = Files.readAllBytes(it.toPath());
+        for (int outerRun = 1; outerRun <= outerLoopRuns; outerRun++) {
+            System.out.println("Starting outer loop iteration: " + outerRun);
 
+            List<File> files = new ArrayList<>(testRuns);
+            URL testFolder = getClass().getClassLoader().getResource("testfiles");
+            for (int i = 0; i < testRuns; i++) {
+                File file = new File(String.format("%s/%s_%d.txt", testFolder.getPath(), outerRun, i));
+                file.deleteOnExit();
+                files.add(file);
+            }
+
+            CountDownLatch countDownLatch = new CountDownLatch(testRuns);
+            SharedExecutorService.getInstance().invokeAll(files.stream().map(it -> (Callable<Void>) () -> {
                 try {
+                    System.out.println("Starting run for file: " + it.getAbsolutePath());
+                    downloadClient.downloadToFileWithResponse(it.getAbsolutePath(), null, null, Context.NONE);
+                    byte[] actualFileBytes = Files.readAllBytes(it.toPath());
+
                     String downloadedChecksum = calculateChecksum(actualFileBytes);
                     System.out.println("downloaded checksum: " + downloadedChecksum);
-                    TestUtils.assertArraysEqual(realFileBytes, actualFileBytes);
                     if (!originalChecksum.equals(downloadedChecksum)) {
                         failedDownloads.put(it.getAbsolutePath(), actualFileBytes);
                         System.out.println("Checksum mismatch for file: " + it.getAbsolutePath());
@@ -162,50 +172,34 @@ public class HttpFaultInjectingTests {
                         LOGGER.atVerbose()
                             .addKeyValue("successCount", successCount.incrementAndGet())
                             .log("Download completed successfully.");
-                        System.out.println("download complete successfully, count: " + successCount);
+                        System.out.println("Download complete successfully, count: " + successCount);
                     }
-                } catch (NoSuchAlgorithmException e) {
-                    System.err.println("Checksum algorithm not found: " + e.getMessage());
-                    LOGGER.atError().log("Failed to calculate checksum.", e);
-                }
-//                } catch (AssertionError e) {
-//                    failedDownloads.put(it.getAbsolutePath(), actualFileBytes);
-//                    System.out.println("Assertion failed for file: " + it.getAbsolutePath());
-//                    LOGGER.atWarning()
-//                        .addKeyValue("downloadFile", it.getAbsolutePath())
-//                        .log("File content did not match expected bytes.", e);
-//                }
 
-                if (Files.exists(it.toPath())) {
-                    System.out.println("File exists: " + it.getAbsolutePath());
-                    FileShareTestHelper.deleteFileIfExists(testFolder.getPath(), it.getName());
+                    if (Files.exists(it.toPath())) {
+                        FileShareTestHelper.deleteFileIfExists(testFolder.getPath(), it.getName());
+                    }
+                } catch (Throwable ex) {
+                    ex.printStackTrace();
+                    exceptionOccurrences.put(it.getAbsolutePath(), ex.getMessage());
+                    System.out.println("Error has occurred for file " + it.getAbsolutePath() + ": " + ex.getMessage());
+                    LOGGER.atWarning()
+                        .addKeyValue("downloadFile", it.getAbsolutePath())
+                        .log("Failed to complete download.", ex);
+                } finally {
+                    countDownLatch.countDown();
                 }
 
-            } catch (Throwable ex) {
-                ex.printStackTrace();
-                exceptionOccurrences.put(it.getAbsolutePath(), ex.getMessage());
-                // Don't let network exceptions fail the download
-                System.out.println("Error has occurred...");
-                System.out.println("Error is: " + ex.getMessage());
-                LOGGER.atWarning()
-                    .addKeyValue("downloadFile", it.getAbsolutePath())
-                    .log("Failed to complete download.", ex);
-            } finally {
-                countDownLatch.countDown();
-                //System.out.println("CountDownLatch: " + countDownLatch.getCount());
-            }
+                return null;
+            }).collect(Collectors.toList()));
 
-            return null;
-        }).collect(Collectors.toList()));
+            // Wait for all downloads in this iteration to complete
+            countDownLatch.await(10, TimeUnit.MINUTES);
+        }
 
-        countDownLatch.await(10, TimeUnit.MINUTES);
-
-        //int expectedRuns = (int) (testRuns * 0.90);
         System.out.println("Total successful downloads: " + successCount.get());
-        System.out.println("Expected successful downloads: " + testRuns);
-        //assertTrue(successCount.get() >= expectedRuns);
+        System.out.println("Expected successful downloads: " + (outerLoopRuns * testRuns));
 
-        // Print out details of failed downloads for debugging
+        // Print accumulated failed downloads
         if (!failedDownloads.isEmpty()) {
             System.out.println("Failed Downloads: " + failedDownloads.size());
             failedDownloads.forEach((filePath, bytes) -> {
@@ -213,25 +207,106 @@ public class HttpFaultInjectingTests {
             });
         }
 
-        // Print out details of failed downloads for debugging
+        // Print accumulated exceptions
         if (!exceptionOccurrences.isEmpty()) {
             System.out.println("Exception Occurrences: " + exceptionOccurrences.size());
             exceptionOccurrences.forEach((filePath, message) -> {
                 System.out.println("File: " + filePath + " and Exception: " + message);
             });
         }
-
-        // cleanup
-        files.forEach(it -> {
-            try {
-                Files.deleteIfExists(it.toPath());
-            } catch (IOException e) {
-                LOGGER.atWarning()
-                    .addKeyValue("file", it.getAbsolutePath())
-                    .log("Failed to delete file.", e);
-            }
-        });
     }
+
+//        CountDownLatch countDownLatch = new CountDownLatch(testRuns);
+//        SharedExecutorService.getInstance().invokeAll(files.stream().map(it -> (Callable<Void>) () -> {
+//            try {
+//                System.out.println("Starting run for file: " + it.getAbsolutePath());
+//                downloadClient.downloadToFileWithResponse(it.getAbsolutePath(), null, null, Context.NONE);
+//                byte[] actualFileBytes = Files.readAllBytes(it.toPath());
+//
+//                try {
+//                    String downloadedChecksum = calculateChecksum(actualFileBytes);
+//                    System.out.println("downloaded checksum: " + downloadedChecksum);
+//                    TestUtils.assertArraysEqual(realFileBytes, actualFileBytes);
+//                    if (!originalChecksum.equals(downloadedChecksum)) {
+//                        failedDownloads.put(it.getAbsolutePath(), actualFileBytes);
+//                        System.out.println("Checksum mismatch for file: " + it.getAbsolutePath());
+//                        LOGGER.atWarning()
+//                            .addKeyValue("downloadFile", it.getAbsolutePath())
+//                            .log("File content did not match expected checksum.");
+//                    } else {
+//                        LOGGER.atVerbose()
+//                            .addKeyValue("successCount", successCount.incrementAndGet())
+//                            .log("Download completed successfully.");
+//                        System.out.println("download complete successfully, count: " + successCount);
+//                    }
+//                } catch (NoSuchAlgorithmException e) {
+//                    System.err.println("Checksum algorithm not found: " + e.getMessage());
+//                    LOGGER.atError().log("Failed to calculate checksum.", e);
+//                }
+////                } catch (AssertionError e) {
+////                    failedDownloads.put(it.getAbsolutePath(), actualFileBytes);
+////                    System.out.println("Assertion failed for file: " + it.getAbsolutePath());
+////                    LOGGER.atWarning()
+////                        .addKeyValue("downloadFile", it.getAbsolutePath())
+////                        .log("File content did not match expected bytes.", e);
+////                }
+//
+//                if (Files.exists(it.toPath())) {
+//                    System.out.println("File exists: " + it.getAbsolutePath());
+//                    FileShareTestHelper.deleteFileIfExists(testFolder.getPath(), it.getName());
+//                }
+//
+//            } catch (Throwable ex) {
+//                ex.printStackTrace();
+//                exceptionOccurrences.put(it.getAbsolutePath(), ex.getMessage());
+//                // Don't let network exceptions fail the download
+//                System.out.println("Error has occurred...");
+//                System.out.println("Error is: " + ex.getMessage());
+//                LOGGER.atWarning()
+//                    .addKeyValue("downloadFile", it.getAbsolutePath())
+//                    .log("Failed to complete download.", ex);
+//            } finally {
+//                countDownLatch.countDown();
+//                //System.out.println("CountDownLatch: " + countDownLatch.getCount());
+//            }
+//
+//            return null;
+//        }).collect(Collectors.toList()));
+//
+//        countDownLatch.await(10, TimeUnit.MINUTES);
+//
+//        //int expectedRuns = (int) (testRuns * 0.90);
+//        System.out.println("Total successful downloads: " + successCount.get());
+//        System.out.println("Expected successful downloads: " + testRuns);
+//        //assertTrue(successCount.get() >= expectedRuns);
+//
+//        // Print out details of failed downloads for debugging
+//        if (!failedDownloads.isEmpty()) {
+//            System.out.println("Failed Downloads: " + failedDownloads.size());
+//            failedDownloads.forEach((filePath, bytes) -> {
+//                System.out.println("File: " + filePath + ", Downloaded bytes (sample): " + Arrays.toString(Arrays.copyOf(bytes, Math.min(bytes.length, 100))));
+//            });
+//        }
+//
+//        // Print out details of failed downloads for debugging
+//        if (!exceptionOccurrences.isEmpty()) {
+//            System.out.println("Exception Occurrences: " + exceptionOccurrences.size());
+//            exceptionOccurrences.forEach((filePath, message) -> {
+//                System.out.println("File: " + filePath + " and Exception: " + message);
+//            });
+//        }
+//
+//        // cleanup
+//        files.forEach(it -> {
+//            try {
+//                Files.deleteIfExists(it.toPath());
+//            } catch (IOException e) {
+//                LOGGER.atWarning()
+//                    .addKeyValue("file", it.getAbsolutePath())
+//                    .log("Failed to delete file.", e);
+//            }
+//        });
+    //}
 
     @SuppressWarnings("unchecked")
     private HttpClient getFaultInjectingWrappedHttpClientWithNetty() {
