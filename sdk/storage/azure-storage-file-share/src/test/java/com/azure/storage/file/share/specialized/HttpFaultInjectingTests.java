@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 package com.azure.storage.file.share.specialized;
 
 import com.azure.core.http.HttpClient;
@@ -9,24 +12,18 @@ import com.azure.core.http.netty.NettyAsyncHttpClientBuilder;
 import com.azure.core.http.netty.NettyAsyncHttpClientProvider;
 import com.azure.core.http.okhttp.OkHttpAsyncClientProvider;
 import com.azure.core.test.TestMode;
-import com.azure.core.test.utils.TestUtils;
-import com.azure.core.util.BinaryData;
 import com.azure.core.util.Context;
 import com.azure.core.util.CoreUtils;
 import com.azure.core.util.HttpClientOptions;
-import com.azure.core.util.SharedExecutorService;
 import com.azure.core.util.UrlBuilder;
 import com.azure.core.util.logging.ClientLogger;
 import com.azure.storage.common.implementation.Constants;
-import com.azure.storage.common.policy.RequestRetryOptions;
-import com.azure.storage.common.policy.RetryPolicyType;
 import com.azure.storage.file.share.FileShareTestBase;
 import com.azure.storage.file.share.FileShareTestHelper;
 import com.azure.storage.file.share.ShareClient;
 import com.azure.storage.file.share.ShareFileClient;
 import com.azure.storage.file.share.ShareFileClientBuilder;
 import com.azure.storage.file.share.ShareServiceClientBuilder;
-import com.azure.storage.file.share.models.ShareFileUploadOptions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,25 +33,35 @@ import reactor.netty.resources.ConnectionProvider;
 import reactor.util.function.Tuple2;
 import reactor.util.function.Tuples;
 
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.Callable;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 import static com.azure.storage.common.test.shared.StorageCommonTestUtils.ENVIRONMENT;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Set of tests that use <a href="">HTTP fault injecting</a> to simulate scenarios where the network has random errors.
@@ -107,18 +114,20 @@ public class HttpFaultInjectingTests {
      * hiding a true issue.
      */
     @Test
-    public void downloadToFileWithFaultInjection() throws InterruptedException, NoSuchAlgorithmException {
-        int outerLoopRuns = 2;
-        int testRuns = 100;
+    public void downloadToFileWithFaultInjection() throws InterruptedException, NoSuchAlgorithmException, IOException, ExecutionException, TimeoutException {
+        int outerLoopRuns = 2;         // Outer loop for 5 iterations
+        int testRuns = 100;            // Inner loop for 100 concurrent runs
         int length = 30 * Constants.MB - 1;
-        byte[] realFileBytes = new byte[length];
-        ThreadLocalRandom.current().nextBytes(realFileBytes);
+        Path originalFilePath = setupReadableFile(length);
+        byte[] realFileBytes = Files.readAllBytes(originalFilePath);
         String originalChecksum = calculateChecksum(realFileBytes);
+
         System.out.println("original checksum: " + originalChecksum);
 
         ShareFileClient fileClient = shareClient.getFileClient(shareClient.getShareName());
         fileClient.create(length);
-        fileClient.uploadWithResponse(new ShareFileUploadOptions(BinaryData.fromBytes(realFileBytes).toStream()), null, Context.NONE);
+        //fileClient.uploadWithResponse(new ShareFileUploadOptions(BinaryData.fromBytes(realFileBytes).toStream()), null, Context.NONE);
+        fileClient.uploadFromFile(originalFilePath.toString());
 
         ShareFileClient downloadClient = new ShareFileClientBuilder()
             .endpoint(ENVIRONMENT.getPrimaryAccount().getFileEndpoint())
@@ -126,21 +135,13 @@ public class HttpFaultInjectingTests {
             .resourcePath(shareClient.getShareName())
             .credential(ENVIRONMENT.getPrimaryAccount().getCredential())
             .httpClient(new HttpFaultInjectingHttpClient(getFaultInjectingWrappedHttpClientWithNetty()))
-            //.retryOptions(new RequestRetryOptions(RetryPolicyType.FIXED, 4, null, 10L, 10L, null))
             .buildFileClient();
 
-//        List<File> files = new ArrayList<>(testRuns);
-//        URL testFolder = getClass().getClassLoader().getResource("testfiles");
-//        //File downloadFile = new File(String.format("%s/%s.txt", testFolder.getPath(), prefix));
-//        for (int i = 0; i < testRuns; i++) {
-//            File file = new File(String.format("%s/%s.txt", testFolder.getPath(), i));
-//            //File file = File.createTempFile(CoreUtils.randomUuid().toString() + i, ".txt");
-//            file.deleteOnExit();
-//            files.add(file);
-//        }
         AtomicInteger successCount = new AtomicInteger();
-        Map<String, byte[]> failedDownloads = new ConcurrentHashMap<>();
-        Map<String, String> exceptionOccurrences = new ConcurrentHashMap<>();
+        Map<String, Path> allFailedDownloads = new ConcurrentHashMap<>();
+        Map<String, String> allExceptionOccurrences = new ConcurrentHashMap<>();
+
+        ExecutorService executor = Executors.newFixedThreadPool(20);
 
         for (int outerRun = 1; outerRun <= outerLoopRuns; outerRun++) {
             System.out.println("Starting outer loop iteration: " + outerRun);
@@ -153,160 +154,76 @@ public class HttpFaultInjectingTests {
                 files.add(file);
             }
 
-            CountDownLatch countDownLatch = new CountDownLatch(testRuns);
-            SharedExecutorService.getInstance().invokeAll(files.stream().map(it -> (Callable<Void>) () -> {
-                try {
-                    System.out.println("Starting run for file: " + it.getAbsolutePath());
-                    downloadClient.downloadToFileWithResponse(it.getAbsolutePath(), null, null, Context.NONE);
-                    byte[] actualFileBytes = Files.readAllBytes(it.toPath());
+            // Use a list of Futures to keep track of submitted tasks
+            List<Future<?>> futures = new ArrayList<>();
 
-                    String downloadedChecksum = calculateChecksum(actualFileBytes);
-                    System.out.println("downloaded checksum: " + downloadedChecksum);
-                    if (!originalChecksum.equals(downloadedChecksum)) {
-                        failedDownloads.put(it.getAbsolutePath(), actualFileBytes);
-                        System.out.println("Checksum mismatch for file: " + it.getAbsolutePath());
+            for (File it : files) {
+                Future<?> future = executor.submit(() -> {
+                    try {
+                        System.out.println("Starting run for file: " + it.getAbsolutePath());
+                        Context context = new Context("filePath", it.getAbsolutePath());
+                        downloadClient.downloadToFileWithResponse(it.getAbsolutePath(), null, null, context);
+                        byte[] actualFileBytes = Files.readAllBytes(it.toPath());
+
+                        String downloadedChecksum = calculateChecksum(actualFileBytes);
+                        System.out.println("downloaded checksum: " + downloadedChecksum);
+                        if (!originalChecksum.equals(downloadedChecksum)) {
+                            // Save the mismatched file for examination
+                            Path mismatchFilePath = Paths.get("C:/azure-sdk-for-java/contentmismatchrepro", it.getName());
+                            Files.write(mismatchFilePath, actualFileBytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                            allFailedDownloads.put(it.getAbsolutePath(), mismatchFilePath);
+                            System.out.println("Checksum mismatch for file: " + it.getAbsolutePath() + " saved to: " + mismatchFilePath);
+                            LOGGER.atWarning()
+                                .addKeyValue("downloadFile", it.getAbsolutePath())
+                                .log("File content did not match expected checksum.");
+                        } else {
+                            LOGGER.atVerbose()
+                                .addKeyValue("successCount", successCount.incrementAndGet())
+                                .log("Download completed successfully.");
+                            System.out.println("Download complete successfully, count: " + successCount);
+                        }
+
+                        if (Files.exists(it.toPath())) {
+                            FileShareTestHelper.deleteFileIfExists(testFolder.getPath(), it.getName());
+                        }
+                    } catch (Throwable ex) {
+                        ex.printStackTrace();
+                        allExceptionOccurrences.put(it.getAbsolutePath(), ex.getMessage());
+                        System.out.println("Error has occurred for file " + it.getAbsolutePath() + ": " + ex.getMessage());
                         LOGGER.atWarning()
                             .addKeyValue("downloadFile", it.getAbsolutePath())
-                            .log("File content did not match expected checksum.");
-                    } else {
-                        LOGGER.atVerbose()
-                            .addKeyValue("successCount", successCount.incrementAndGet())
-                            .log("Download completed successfully.");
-                        System.out.println("Download complete successfully, count: " + successCount);
+                            .log("Failed to complete download.", ex);
                     }
-
-                    if (Files.exists(it.toPath())) {
-                        FileShareTestHelper.deleteFileIfExists(testFolder.getPath(), it.getName());
-                    }
-                } catch (Throwable ex) {
-                    ex.printStackTrace();
-                    exceptionOccurrences.put(it.getAbsolutePath(), ex.getMessage());
-                    System.out.println("Error has occurred for file " + it.getAbsolutePath() + ": " + ex.getMessage());
-                    LOGGER.atWarning()
-                        .addKeyValue("downloadFile", it.getAbsolutePath())
-                        .log("Failed to complete download.", ex);
-                } finally {
-                    countDownLatch.countDown();
-                }
-
-                return null;
-            }).collect(Collectors.toList()));
-
-            // Wait for all downloads in this iteration to complete
-            countDownLatch.await(10, TimeUnit.MINUTES);
+                });
+                futures.add(future);
+            }
+            // Wait for all tasks in this iteration to complete
+            for (Future<?> future : futures) {
+                future.get(10, TimeUnit.MINUTES); // Await completion of each task, with timeout
+            }
         }
+
+        executor.shutdown(); // Shut down the executor after all tasks are complete
 
         System.out.println("Total successful downloads: " + successCount.get());
         System.out.println("Expected successful downloads: " + (outerLoopRuns * testRuns));
 
         // Print accumulated failed downloads
-        if (!failedDownloads.isEmpty()) {
-            System.out.println("Failed Downloads: " + failedDownloads.size());
-            failedDownloads.forEach((filePath, bytes) -> {
-                System.out.println("File: " + filePath + ", Downloaded bytes (sample): " + Arrays.toString(Arrays.copyOf(bytes, Math.min(bytes.length, 100))));
+        if (!allFailedDownloads.isEmpty()) {
+            System.out.println("Failed Downloads: " + allFailedDownloads.size());
+            allFailedDownloads.forEach((filePath, mismatchFilePath) -> {
+                System.out.println("File: " + filePath + " saved at: " + mismatchFilePath);
             });
         }
 
         // Print accumulated exceptions
-        if (!exceptionOccurrences.isEmpty()) {
-            System.out.println("Exception Occurrences: " + exceptionOccurrences.size());
-            exceptionOccurrences.forEach((filePath, message) -> {
+        if (!allExceptionOccurrences.isEmpty()) {
+            System.out.println("Exception Occurrences: " + allExceptionOccurrences.size());
+            allExceptionOccurrences.forEach((filePath, message) -> {
                 System.out.println("File: " + filePath + " and Exception: " + message);
             });
         }
     }
-
-//        CountDownLatch countDownLatch = new CountDownLatch(testRuns);
-//        SharedExecutorService.getInstance().invokeAll(files.stream().map(it -> (Callable<Void>) () -> {
-//            try {
-//                System.out.println("Starting run for file: " + it.getAbsolutePath());
-//                downloadClient.downloadToFileWithResponse(it.getAbsolutePath(), null, null, Context.NONE);
-//                byte[] actualFileBytes = Files.readAllBytes(it.toPath());
-//
-//                try {
-//                    String downloadedChecksum = calculateChecksum(actualFileBytes);
-//                    System.out.println("downloaded checksum: " + downloadedChecksum);
-//                    TestUtils.assertArraysEqual(realFileBytes, actualFileBytes);
-//                    if (!originalChecksum.equals(downloadedChecksum)) {
-//                        failedDownloads.put(it.getAbsolutePath(), actualFileBytes);
-//                        System.out.println("Checksum mismatch for file: " + it.getAbsolutePath());
-//                        LOGGER.atWarning()
-//                            .addKeyValue("downloadFile", it.getAbsolutePath())
-//                            .log("File content did not match expected checksum.");
-//                    } else {
-//                        LOGGER.atVerbose()
-//                            .addKeyValue("successCount", successCount.incrementAndGet())
-//                            .log("Download completed successfully.");
-//                        System.out.println("download complete successfully, count: " + successCount);
-//                    }
-//                } catch (NoSuchAlgorithmException e) {
-//                    System.err.println("Checksum algorithm not found: " + e.getMessage());
-//                    LOGGER.atError().log("Failed to calculate checksum.", e);
-//                }
-////                } catch (AssertionError e) {
-////                    failedDownloads.put(it.getAbsolutePath(), actualFileBytes);
-////                    System.out.println("Assertion failed for file: " + it.getAbsolutePath());
-////                    LOGGER.atWarning()
-////                        .addKeyValue("downloadFile", it.getAbsolutePath())
-////                        .log("File content did not match expected bytes.", e);
-////                }
-//
-//                if (Files.exists(it.toPath())) {
-//                    System.out.println("File exists: " + it.getAbsolutePath());
-//                    FileShareTestHelper.deleteFileIfExists(testFolder.getPath(), it.getName());
-//                }
-//
-//            } catch (Throwable ex) {
-//                ex.printStackTrace();
-//                exceptionOccurrences.put(it.getAbsolutePath(), ex.getMessage());
-//                // Don't let network exceptions fail the download
-//                System.out.println("Error has occurred...");
-//                System.out.println("Error is: " + ex.getMessage());
-//                LOGGER.atWarning()
-//                    .addKeyValue("downloadFile", it.getAbsolutePath())
-//                    .log("Failed to complete download.", ex);
-//            } finally {
-//                countDownLatch.countDown();
-//                //System.out.println("CountDownLatch: " + countDownLatch.getCount());
-//            }
-//
-//            return null;
-//        }).collect(Collectors.toList()));
-//
-//        countDownLatch.await(10, TimeUnit.MINUTES);
-//
-//        //int expectedRuns = (int) (testRuns * 0.90);
-//        System.out.println("Total successful downloads: " + successCount.get());
-//        System.out.println("Expected successful downloads: " + testRuns);
-//        //assertTrue(successCount.get() >= expectedRuns);
-//
-//        // Print out details of failed downloads for debugging
-//        if (!failedDownloads.isEmpty()) {
-//            System.out.println("Failed Downloads: " + failedDownloads.size());
-//            failedDownloads.forEach((filePath, bytes) -> {
-//                System.out.println("File: " + filePath + ", Downloaded bytes (sample): " + Arrays.toString(Arrays.copyOf(bytes, Math.min(bytes.length, 100))));
-//            });
-//        }
-//
-//        // Print out details of failed downloads for debugging
-//        if (!exceptionOccurrences.isEmpty()) {
-//            System.out.println("Exception Occurrences: " + exceptionOccurrences.size());
-//            exceptionOccurrences.forEach((filePath, message) -> {
-//                System.out.println("File: " + filePath + " and Exception: " + message);
-//            });
-//        }
-//
-//        // cleanup
-//        files.forEach(it -> {
-//            try {
-//                Files.deleteIfExists(it.toPath());
-//            } catch (IOException e) {
-//                LOGGER.atWarning()
-//                    .addKeyValue("file", it.getAbsolutePath())
-//                    .log("Failed to delete file.", e);
-//            }
-//        });
-    //}
 
     @SuppressWarnings("unchecked")
     private HttpClient getFaultInjectingWrappedHttpClientWithNetty() {
@@ -327,37 +244,30 @@ public class HttpFaultInjectingTests {
 
     @SuppressWarnings("unchecked")
     private HttpClient getFaultInjectingWrappedHttpClient() {
-        ConnectionProvider connectionProvider = ConnectionProvider.builder("custom")
-            .maxConnections(100)                       // Adjust max connections as needed
-            .pendingAcquireTimeout(Duration.ofSeconds(60)) // Increase timeout for acquiring a connection
-            .maxIdleTime(Duration.ofSeconds(30))        // Set max idle time for connections
-            .maxLifeTime(Duration.ofMinutes(5))         // Set max lifetime for connections
-            .build();
-
         switch (ENVIRONMENT.getHttpClientType()) {
             case NETTY:
                 System.out.println("Using netty");
                 return HttpClient.createDefault(new HttpClientOptions()
-                    .readTimeout(Duration.ofSeconds(2)).setMaximumConnectionPoolSize(200)
+                    .readTimeout(Duration.ofSeconds(2))
                     //.responseTimeout(Duration.ofSeconds(2))
                     .setHttpClientProvider(NettyAsyncHttpClientProvider.class));
             case OK_HTTP:
                 System.out.println("Using ok_http");
                 return HttpClient.createDefault(new HttpClientOptions()
-                    .readTimeout(Duration.ofSeconds(2)).setMaximumConnectionPoolSize(200)
+                    .readTimeout(Duration.ofSeconds(2))
                     //.responseTimeout(Duration.ofSeconds(2))
                     .setHttpClientProvider(OkHttpAsyncClientProvider.class));
             case VERTX:
                 System.out.println("using vertx");
                 return HttpClient.createDefault(new HttpClientOptions()
-                    .readTimeout(Duration.ofSeconds(2)).setMaximumConnectionPoolSize(200)
+                    .readTimeout(Duration.ofSeconds(2))
                     //.responseTimeout(Duration.ofSeconds(2))
                     .setHttpClientProvider(getVertxClientProviderReflectivelyUntilNameChangeReleases()));
             case JDK_HTTP:
                 try {
                     System.out.println("using jdk_http");
                     return HttpClient.createDefault(new HttpClientOptions()
-                        .readTimeout(Duration.ofSeconds(2)).setMaximumConnectionPoolSize(200)
+                        .readTimeout(Duration.ofSeconds(2))
                         //.responseTimeout(Duration.ofSeconds(2))
                         .setHttpClientProvider((Class<? extends HttpClientProvider>) Class.forName(
                             "com.azure.core.http.jdk.httpclient.JdkHttpClientProvider")));
@@ -387,6 +297,42 @@ public class HttpFaultInjectingTests {
         return (Class<? extends HttpClientProvider>) clazz;
     }
 
+    /**
+     * Creates a readable file of the specified size if it doesn't already exist.
+     *
+     * @return Path to the generated file.
+     * @throws IOException if an I/O error occurs during file creation.
+     */
+    public static Path setupReadableFile(int fileSize) throws IOException {
+        Path originalDataPath = Paths.get("C:/azure-sdk-for-java/contentmismatchrepro/original_data.txt");
+        if (Files.exists(originalDataPath) && Files.size(originalDataPath) == fileSize) {
+            System.out.println("File already exists at: " + originalDataPath.toAbsolutePath());
+            return originalDataPath; // Return existing file if it matches the required size
+        }
+
+        System.out.println("Creating new file at: " + originalDataPath.toAbsolutePath());
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(originalDataPath.toFile()))) {
+            Random random = new Random();
+            String characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+            // Write characters in chunks to manage memory usage
+            int chunkSize = 1024; // Write in 1 KB chunks
+            int written = 0;
+
+            while (written < fileSize) {
+                StringBuilder chunk = new StringBuilder(chunkSize);
+                for (int i = 0; i < chunkSize && written + i < fileSize; i++) {
+                    chunk.append(characters.charAt(random.nextInt(characters.length())));
+                }
+                writer.write(chunk.toString());
+                written += chunkSize;
+            }
+        }
+
+        System.out.println("File created at: " + originalDataPath.toAbsolutePath() + " with size: " + Files.size(originalDataPath));
+        return originalDataPath;
+    }
+
     // For now a local implementation is here in azure-storage-blob until this is released in azure-core-test.
     // Since this is a local definition with a clear set of configurations everything is simplified.
     private static final class HttpFaultInjectingHttpClient implements HttpClient {
@@ -404,16 +350,23 @@ public class HttpFaultInjectingTests {
         @Override
         public Mono<HttpResponse> send(HttpRequest request, Context context) {
             URL originalUrl = request.getUrl();
-            request.setHeader(UPSTREAM_URI_HEADER, originalUrl.toString()).setUrl(rewriteUrl(originalUrl));
+            String filePath = context.getData("filePath").orElse("unknown file path").toString();
+            //String fileName = extractFileNameFromUrl(originalUrl); // Extract the file name from the URL
             String faultType = faultInjectorHandling();
-            //System.out.println("fault type: " + faultType);
+            String range = request.getHeaders().getValue("x-ms-range");
             request.setHeader(HTTP_FAULT_INJECTOR_RESPONSE_HEADER, faultType);
+            logRequestDetails(request, filePath, faultType, range);
+            request.setHeader(UPSTREAM_URI_HEADER, originalUrl.toString()).setUrl(rewriteUrl(originalUrl));
+
+// add range header to see the requested bytes
+
 
             return wrappedHttpClient.send(request, context)
                 .map(response -> {
                     HttpRequest request1 = response.getRequest();
                     request1.getHeaders().remove(UPSTREAM_URI_HEADER);
                     request1.setUrl(originalUrl);
+                    logResponseDetails(response, filePath);
 
                     return response;
                 });
@@ -422,15 +375,42 @@ public class HttpFaultInjectingTests {
         @Override
         public HttpResponse sendSync(HttpRequest request, Context context) {
             URL originalUrl = request.getUrl();
-            request.setHeader(UPSTREAM_URI_HEADER, originalUrl.toString()).setUrl(rewriteUrl(originalUrl));
+            //String fileName = extractFileNameFromUrl(originalUrl); // Extract the file name from the URL
+            String filePath = context.getData("filePath").orElse("unknown file path").toString();
             String faultType = faultInjectorHandling();
+            String range = request.getHeaders().getValue("x-ms-range");
             request.setHeader(HTTP_FAULT_INJECTOR_RESPONSE_HEADER, faultType);
+            logRequestDetails(request, filePath, faultType, range);
+            request.setHeader(UPSTREAM_URI_HEADER, originalUrl.toString()).setUrl(rewriteUrl(originalUrl));
 
             HttpResponse response = wrappedHttpClient.sendSync(request, context);
             response.getRequest().setUrl(originalUrl);
             response.getRequest().getHeaders().remove(UPSTREAM_URI_HEADER);
+            logResponseDetails(response, filePath);
 
             return response;
+        }
+
+        private static String extractFileNameFromUrl(URL url) {
+            String path = url.getPath();
+            String[] pathSegments = path.split("/");
+            return pathSegments[pathSegments.length - 1]; // Assume the last segment is the file name
+        }
+
+        private static void logRequestDetails(HttpRequest request, String fileName, String faultType, String range) {
+            LOGGER.atInfo()
+                .addKeyValue("FileName", fileName)
+                .addKeyValue("Request URL", request.getUrl())
+                .addKeyValue("Fault Type", faultType)
+                .addKeyValue("x-ms-range", range)
+                .log("Sending request associated with file.");
+        }
+
+        private static void logResponseDetails(HttpResponse response, String fileName) {
+            LOGGER.atInfo()
+                .addKeyValue("FileName", fileName)
+                .addKeyValue("Status Code", response.getStatusCode())
+                .log("Received response for file.");
         }
 
         private static URL rewriteUrl(URL originalUrl) {
@@ -444,42 +424,6 @@ public class HttpFaultInjectingTests {
                 throw new RuntimeException(e);
             }
         }
-
-//        private static String faultInjectorHandling() {
-//            // f: Full response
-//            // p: Partial Response (full headers, 50% of body), then wait indefinitely
-//            // pc: Partial Response (full headers, 50% of body), then close (TCP FIN)
-//            // pa: Partial Response (full headers, 50% of body), then abort (TCP RST)
-//            // pn: Partial Response (full headers, 50% of body), then finish normally
-//            // n: No response, then wait indefinitely
-//            // nc: No response, then close (TCP FIN)
-//            // na: No response, then abort (TCP RST)
-//            double random = ThreadLocalRandom.current().nextDouble();
-//            int choice = (int) (random * 100);
-//
-//            if (choice >= 25) {
-//                // 75% of requests complete without error.
-//                return "f";
-//            } else if (choice >= 1) {
-//                if (random <= 0.34D) {
-//                    return "n";
-//                } else if (random <= 0.67D) {
-//                    return "nc";
-//                } else {
-//                    return "na";
-//                }
-//            } else {
-//                if (random <= 0.25D) {
-//                    return "p";
-//                } else if (random <= 0.50D) {
-//                    return "pc";
-//                } else if (random <= 0.75D) {
-//                    return "pa";
-//                } else {
-//                    return "pn";
-//                }
-//            }
-//        }
 
         private static List<Tuple2<Double, String>> addResponseFaultedProbabilities() {
             // f: Full response
