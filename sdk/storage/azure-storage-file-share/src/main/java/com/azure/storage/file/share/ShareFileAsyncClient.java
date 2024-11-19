@@ -1012,9 +1012,15 @@ public class ShareFileAsyncClient {
                     .setRequestConditions(requestConditions), context)
                 .map(ShareFileDownloadAsyncResponse::getValue)
                 .flatMap(fbb -> FluxUtil
-                    .writeFile(fbb, channel, chunk.getStart() - (range == null ? 0 : range.getStart()))
-                    .retryWhen(Retry.max(3).filter(throwable -> throwable instanceof IOException
-                        || throwable instanceof TimeoutException))))
+                    .writeFile(fbb, channel, chunk.getStart() - (range == null ? 0 : range.getStart())) // add logging here to see what the position is from the retry
+                    .retryWhen(Retry.max(3)
+                        .filter(throwable -> throwable instanceof IOException || throwable instanceof TimeoutException)
+                        .doAfterRetry(retrySignal -> { // how can we make a copy of the pointer to pass in here?
+                            long expectedPosition = chunk.getStart() - (range == null ? 0 : range.getStart());
+                            LOGGER.info("Retrying write at position: " + expectedPosition);
+                            System.out.println("Retrying write at position: " + expectedPosition);
+                        }))
+                ))
             .then(Mono.just(response));
     }
 

@@ -149,7 +149,7 @@ public class HttpFaultInjectingTests {
             List<File> files = new ArrayList<>(testRuns);
             URL testFolder = getClass().getClassLoader().getResource("testfiles");
             for (int i = 0; i < testRuns; i++) {
-                File file = new File(String.format("%s/%s_%d.txt", testFolder.getPath(), outerRun, i));
+                File file = new File(String.format("%s/%s_%d_debug2.txt", testFolder.getPath(), outerRun, i));
                 file.deleteOnExit();
                 files.add(file);
             }
@@ -435,10 +435,10 @@ public class HttpFaultInjectingTests {
             // nc: No response, then close (TCP FIN)
             // na: No response, then abort (TCP RST)
             List<Tuple2<Double, String>> probabilities = new ArrayList<>();
-            probabilities.add(Tuples.of(0.06, "p"));
-            probabilities.add(Tuples.of(0.06, "pc"));
-            probabilities.add(Tuples.of(0.06, "pa"));
-            probabilities.add(Tuples.of(0.06, "pn"));
+            probabilities.add(Tuples.of(0.1, "p"));
+            probabilities.add(Tuples.of(0.1, "pc"));
+            probabilities.add(Tuples.of(0.1, "pa"));
+            probabilities.add(Tuples.of(0.1, "pn"));
             probabilities.add(Tuples.of(0.003, "n"));
             probabilities.add(Tuples.of(0.004, "nc"));
             probabilities.add(Tuples.of(0.003, "na"));
