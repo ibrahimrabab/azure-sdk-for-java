@@ -51,8 +51,8 @@ def filter_and_sort_logs(log_file_path, file_name, output_file_path):
 
 if __name__ == "__main__":
     log_file_path = "C:/azure-sdk-for-java/sdk/storage/azure-storage-file-share/target/azure-storage-file-share-test.log"
-    file_name = "1_51.txt"
-    output_file_path = "C:/azure-sdk-for-java/contentmismatchrepro/filtered_logs_1_51.txt"
+    file_name = "1_0_debug.txt"
+    output_file_path = "C:/azure-sdk-for-java/contentmismatchrepro/filtered_logs_1_0_debug.txt"
 
     # Call the filter_and_sort_logs function with the provided arguments
     filter_and_sort_logs(log_file_path, file_name, output_file_path)

@@ -14,6 +14,20 @@ def print_expected_ranges(original_path):
                     expected_end = len(original_content) - 1
                 print(f"{i}-{expected_end}")
 
+def compare_chunks(first_range, last_range, original_path, download_path, mismatch_start, mismatch_end):
+    with open(original_path, "rb") as original_file:
+        original_content = original_file.read()
+        expected_content = original_content[first_range:last_range + 1]
+        print(f"Expected range: {first_range}-{last_range}")
+        #print(f"Expected bytes: {expected_content}")
+
+    with open(download_path, "rb") as download_file:
+        download_content = download_file.read()
+        actual_content = download_content[mismatch_start:mismatch_end + 1]
+        #print(f"Actual bytes: {actual_content}")
+
+        print(actual_content == expected_content)
+
 def compare_files(original_path, downloaded_path, output_path):
     global mismatch_found
 
@@ -63,9 +77,8 @@ def compare_files(original_path, downloaded_path, output_path):
 
 # Get the file paths from the command line arguments
 original_file_path = "C:/azure-sdk-for-java/contentmismatchrepro/original_data.txt"
-downloaded_file_path = "C:/azure-sdk-for-java/contentmismatchrepro/1_0_debug.txt"
-output_file_path = "C:/azure-sdk-for-java/contentmismatchrepro/results_1_0_debug.txt"
+downloaded_file_path = "C:/azure-sdk-for-java/contentmismatchrepro/1_9.txt"
+output_file_path = "C:/azure-sdk-for-java/contentmismatchrepro/results_1_9.txt"
 
 # Run the comparison
-print_expected_ranges(original_file_path)
-compare_files(original_file_path, downloaded_file_path, output_file_path)
+compare_chunks(25165824, 29360127, original_file_path, downloaded_file_path, 28450048, 32644352)
