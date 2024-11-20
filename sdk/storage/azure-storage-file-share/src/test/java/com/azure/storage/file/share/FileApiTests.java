@@ -4,8 +4,10 @@
 package com.azure.storage.file.share;
 
 import com.azure.core.exception.UnexpectedLengthException;
-import com.azure.core.http.HttpHeaderName;
+import com.azure.core.http.*;
+import com.azure.core.http.policy.HttpPipelinePolicy;
 import com.azure.core.http.rest.Response;
+import com.azure.core.test.http.MockHttpResponse;
 import com.azure.core.util.Context;
 import com.azure.core.util.CoreUtils;
 import com.azure.core.util.polling.LongRunningOperationStatus;
@@ -69,6 +71,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -76,6 +79,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.NoSuchFileException;
@@ -88,6 +92,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -635,6 +640,148 @@ class FileApiTests extends FileShareTestBase {
         String bodyStr = outStream.toString();
 
         assertEquals(bodyStr, DATA.getDefaultText());
+    }
+
+    public class CustomDownloadPolicy implements HttpPipelinePolicy {
+        private final AtomicInteger retryCount = new AtomicInteger(0);
+        private final byte[] data;
+
+        public CustomDownloadPolicy(byte[] data) {
+            this.data = data;
+        }
+
+        @Override
+        public Mono<HttpResponse> process(HttpPipelineCallContext context, HttpPipelineNextPolicy next) {
+            int count = retryCount.incrementAndGet();
+            if (count <= 5) {
+                return Mono.just(new MockHttpResponse(context.getHttpRequest(), 206,
+                    new ByteArrayInputStream(new byte[] { data[count - 1] })));
+            } else {
+                return Mono.just(new MockHttpResponse(context.getHttpRequest(), 200, new ByteArrayInputStream(data)));
+            }
+        }
+
+        public int getRetryCount() {
+            return retryCount.get();
+        }
+    }
+
+    public class HttpFaultInjectingHttpClient implements HttpClient {
+        private final HttpClient wrappedHttpClient;
+        private final AtomicInteger retryCount = new AtomicInteger(0);
+        private final byte[] data;
+
+        public HttpFaultInjectingHttpClient(HttpClient wrappedHttpClient, byte[] data) {
+            this.wrappedHttpClient = wrappedHttpClient;
+            this.data = data;
+        }
+
+        @Override
+        public Mono<HttpResponse> send(HttpRequest request) {
+            return send(request, Context.NONE);
+        }
+
+        @Override
+        public Mono<HttpResponse> send(HttpRequest request, Context context) {
+            int count = retryCount.incrementAndGet();
+            if (count <= 5) {
+                return Mono.just(new MockHttpResponse(request, 206, ByteBuffer.wrap(new byte[] { data[count - 1] })));
+            } else {
+                return wrappedHttpClient.send(request, context)
+                    .map(response -> new MockHttpResponse(request, 200, ByteBuffer.wrap(data)));
+            }
+        }
+
+        @Override
+        public HttpResponse sendSync(HttpRequest request, Context context) {
+            int count = retryCount.incrementAndGet();
+            if (count <= 5) {
+                return new MockHttpResponse(request, 206, ByteBuffer.wrap(new byte[] { data[count - 1] }));
+            } else {
+                HttpResponse response = wrappedHttpClient.sendSync(request, context);
+                return new MockHttpResponse(request, 200, ByteBuffer.wrap(data));
+            }
+        }
+
+        public int getRetryCount() {
+            return retryCount.get();
+        }
+    }
+
+    @Test
+    public void downloadRetryExhaustedWithHttpClient() throws IOException {
+        primaryFileClient.create(DATA.getDefaultDataSizeLong());
+        primaryFileClient.upload(DATA.getDefaultInputStream(), DATA.getDefaultDataSizeLong());
+
+        HttpFaultInjectingHttpClient httpClient
+            = new HttpFaultInjectingHttpClient(getHttpClient(), DATA.getDefaultBytes());
+        ShareFileClient failureClient
+            = fileBuilderHelper(shareName, primaryFileClient.getFileUrl()).httpClient(httpClient).buildFileClient();
+
+        File outFile = new File(generatePathName() + ".txt");
+        if (outFile.exists()) {
+            assertTrue(outFile.delete());
+        }
+
+        failureClient.downloadToFile(outFile.getAbsolutePath());
+
+        assertEquals(6, httpClient.getRetryCount());
+        assertArrayEquals(DATA.getDefaultBytes(), java.nio.file.Files.readAllBytes(outFile.toPath()));
+
+        //cleanup
+        outFile.delete();
+    }
+
+    @Test
+    public void downloadRetryExhaustedWithCustomPolicy() throws IOException {
+        primaryFileClient.create(DATA.getDefaultDataSizeLong());
+        primaryFileClient.upload(DATA.getDefaultInputStream(), DATA.getDefaultDataSizeLong());
+
+        CustomDownloadPolicy customDownloadPolicy = new CustomDownloadPolicy(DATA.getDefaultBytes());
+        ShareFileClient failureClient = getFileClient(ENVIRONMENT.getPrimaryAccount().getCredential(),
+            primaryFileClient.getFileUrl(), customDownloadPolicy);
+
+        File outFile = new File(generatePathName() + ".txt");
+        if (outFile.exists()) {
+            assertTrue(outFile.delete());
+        }
+
+        failureClient.downloadToFile(outFile.getAbsolutePath());
+
+        assertEquals(6, customDownloadPolicy.getRetryCount());
+        assertArrayEquals(DATA.getDefaultBytes(), java.nio.file.Files.readAllBytes(outFile.toPath()));
+
+        //cleanup
+        outFile.delete();
+    }
+
+    @Test
+    public void downloadRetryExhausted() {
+        primaryFileClient.create(DATA.getDefaultDataSizeLong());
+        primaryFileClient.upload(DATA.getDefaultInputStream(), DATA.getDefaultDataSizeLong());
+
+        RetryCountingPolicy retryCountingPolicy = new RetryCountingPolicy();
+        ShareFileClient failureClient = getFileClient(ENVIRONMENT.getPrimaryAccount().getCredential(),
+            primaryFileClient.getFileUrl(), new MockFailureResponsePolicy(5), retryCountingPolicy);
+
+        ByteArrayOutputStream outStream = new ByteArrayOutputStream();
+        assertThrows(IOException.class, () -> failureClient.download(outStream));
+
+        assertEquals(5, retryCountingPolicy.getRetryCount() - 1); // Subtract 1 for the initial request
+    }
+
+    public class RetryCountingPolicy implements HttpPipelinePolicy {
+        private int retryCount = 0;
+
+        @Override
+        public Mono<HttpResponse> process(HttpPipelineCallContext context, HttpPipelineNextPolicy next) {
+            retryCount++;
+            return next.process();
+        }
+
+        public int getRetryCount() {
+            return retryCount;
+        }
     }
 
     @RequiredServiceVersion(clazz = ShareServiceVersion.class, min = "2022-11-02")
