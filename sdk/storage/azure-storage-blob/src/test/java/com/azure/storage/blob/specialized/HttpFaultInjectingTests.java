@@ -166,9 +166,7 @@ public class HttpFaultInjectingTests {
             try {
                 Files.deleteIfExists(it.toPath());
             } catch (IOException e) {
-                LOGGER.atWarning()
-                    .addKeyValue("file", it.getAbsolutePath())
-                    .log("Failed to delete file.", e);
+                LOGGER.atWarning().addKeyValue("file", it.getAbsolutePath()).log("Failed to delete file.", e);
             }
         });
     }
