@@ -13,6 +13,7 @@ import com.azure.core.util.io.IOUtils;
 import com.azure.storage.blob.implementation.accesshelpers.BlobDownloadAsyncResponseConstructorProxy;
 import com.azure.storage.blob.implementation.models.BlobsDownloadHeaders;
 import com.azure.storage.blob.implementation.util.ModelHelper;
+import com.azure.storage.common.implementation.StructuredMessageDecoder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -76,6 +77,32 @@ public final class BlobDownloadAsyncResponse extends ResponseBase<BlobDownloadHe
         HttpHeaders headers = response.getHeaders();
         return ModelHelper.populateBlobDownloadHeaders(new BlobsDownloadHeaders(headers),
             ModelHelper.getErrorCode(headers));
+    }
+
+    public static Flux<ByteBuffer> createDecodedResponseFlux(StreamResponse sourceResponse,
+        BiFunction<Throwable, Long, Mono<StreamResponse>> onErrorResume, DownloadRetryOptions retryOptions) {
+        return FluxUtil
+            .createRetriableDownloadFlux(sourceResponse::getValue,
+                (throwable, position) -> onErrorResume.apply(throwable, position).flatMapMany(StreamResponse::getValue),
+                retryOptions.getMaxRetryRequests())
+            .collectList()
+            .flatMapMany(byteBuffers -> {
+                ByteBuffer downloadedData
+                    = ByteBuffer.allocate(byteBuffers.stream().mapToInt(ByteBuffer::remaining).sum());
+                byteBuffers.forEach(downloadedData::put);
+                downloadedData.flip();
+
+                StructuredMessageDecoder structuredMessageDecoder = new StructuredMessageDecoder(downloadedData);
+                byte[] decodedData;
+                try {
+                    decodedData = structuredMessageDecoder.decode();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+
+                return Flux.just(ByteBuffer.wrap(decodedData));
+            })
+            .defaultIfEmpty(EMPTY_BUFFER);
     }
 
     private static Flux<ByteBuffer> createResponseFlux(StreamResponse sourceResponse,

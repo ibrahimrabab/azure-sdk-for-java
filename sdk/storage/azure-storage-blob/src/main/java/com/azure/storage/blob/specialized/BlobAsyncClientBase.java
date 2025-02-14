@@ -83,17 +83,21 @@ import com.azure.storage.common.StorageSharedKeyCredential;
 import com.azure.storage.common.Utility;
 import com.azure.storage.common.implementation.SasImplUtils;
 import com.azure.storage.common.implementation.StorageImplUtils;
+import com.azure.storage.common.implementation.StructuredMessageDecoder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.nio.channels.AsynchronousByteChannel;
 import java.nio.channels.AsynchronousFileChannel;
+import java.nio.channels.Channels;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.OpenOption;
@@ -117,6 +121,7 @@ import java.util.function.Consumer;
 import static com.azure.core.util.FluxUtil.fluxError;
 import static com.azure.core.util.FluxUtil.monoError;
 import static com.azure.core.util.FluxUtil.withContext;
+import static com.azure.storage.blob.models.BlobDownloadAsyncResponse.createDecodedResponseFlux;
 
 /**
  * This class provides a client that contains all operations that apply to any blob type.
@@ -1276,7 +1281,11 @@ public class BlobAsyncClientBase {
                     }
                 };
 
-                return BlobDownloadAsyncResponseConstructorProxy.create(response, onDownloadErrorResume, finalOptions);
+                //return BlobDownloadAsyncResponseConstructorProxy.create(response, onDownloadErrorResume, finalOptions);
+                Flux<ByteBuffer> decodedResponseFlux
+                    = createDecodedResponseFlux(response, onDownloadErrorResume, finalOptions);
+                return new BlobDownloadAsyncResponse(response.getRequest(), response.getStatusCode(),
+                    response.getHeaders(), decodedResponseFlux, blobDownloadHeaders);
             });
     }
 
@@ -1284,7 +1293,7 @@ public class BlobAsyncClientBase {
         Boolean getMD5, Context context) {
         return azureBlobStorage.getBlobs()
             .downloadNoCustomHeadersWithResponseAsync(containerName, blobName, snapshot, versionId, null,
-                range.toHeaderValue(), requestConditions.getLeaseId(), getMD5, null, null,
+                range.toHeaderValue(), requestConditions.getLeaseId(), getMD5, null, "XSM/1.0; properties=crc64",
                 requestConditions.getIfModifiedSince(), requestConditions.getIfUnmodifiedSince(), eTag,
                 requestConditions.getIfNoneMatch(), requestConditions.getTagsConditions(), null, customerProvidedKey,
                 context);
